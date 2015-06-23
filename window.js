@@ -57,14 +57,41 @@ var Controller = function(options)
 		self.socket = new Sockets(options);
 		self.socket.init(function(){
 			self.socket.connect(function(result){
-				self.socket.info(function(info){
-					var msg = 'Connected to '+ info.peerAddress +'.';
-					self.terminal.output(msg, 'body');
-					var msg = "Escape character is '^]'";
-					self.terminal.output(msg, 'body');
-				});
+				if (result!==0) {
+					self.end();
+				} else {
+					self.socket.info(function(info){
+						var msg = 'Connected to '+ info.peerAddress +'.';
+						self.terminal.output(msg, 'body');
+						var msg = "Escape character is '^]'";
+						self.terminal.output(msg, 'body');
+					});
+					
+					self.keepConnection();
+				}
 			});
 		});
+	}
+	
+	this.keepConnection = function(){
+		self.interval = setInterval(function(){
+			self.socket.socket.setKeepAlive(self.socket.socketId, true, 30, function(res){
+				if (res!==0) {
+					self.end();
+				}
+				self.socket.info(function(info){
+					if (info.connected === false) {
+						self.end();
+					}
+				});
+			});
+		}, 1000);
+	}
+	
+	this.end = function() {
+		self.interval && clearInterval(self.interval);
+		self.socket && self.socket.socketId && chrome.sockets.tcp.close(self.socket.socketId);
+		self.terminal.output('Connection close.', 'head');
 	}
 }
 
@@ -111,20 +138,11 @@ var Terminal = function(options)
 				break;
 			case 'body':
 				ele.addEventListener('keydown', function(e){
+					console.log(e.keyCode);
 					switch (e.keyCode) {
 						case 68: // ctrl+D
-							if (e.ctrlKey) {
-								e.preventDefault();
-								console.log(ele.innerText);
-								var msg = ele.innerText;
-								controller.socket.send(msg, function(info){
-									console.log("send: "+ encodeURI(msg), info);
-								});
-								controller.terminal.input('body');
-							}
 							break;
 						case 13: // enter
-							break;
 							e.preventDefault();
 							
 							var msg = ele.innerText + "\r\n";
