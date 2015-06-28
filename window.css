@@ -73,3 +73,24 @@ border:0; outline:0;
 color:red;
 width:20px;
 }
+
+span.caret{
+  position: relative;
+  margin-right: -9px;
+  z-index:100;
+  -webkit-animation:caret-command-style 1s;
+  -webkit-animation-iteration-count:100000;
+}
+span.caret::before {
+  content: ' ';
+  visibility: hidden;
+}
+
+@-webkit-keyframes caret-command-style {
+from {
+background-color: rgb(255,255,255);
+}
+to {
+background-color: transparent;
+}
+}
