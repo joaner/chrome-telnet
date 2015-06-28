@@ -54,8 +54,13 @@ var Controller = function(options)
 		options.receiveCallback = function(msg) {
 			self.terminal.output(msg, 'body');
 		};
+		options.receiveErrorCallback = function(msg) {
+			console.log(msg);
+		};
 		self.socket = new Sockets(options);
 		self.socket.init(function(){
+			var msg = 'try '+ options.host + ':' + options.port +'...';
+			self.terminal.output(msg, 'body');
 			self.socket.connect(function(result){
 				if (result!==0) {
 					self.end();
@@ -75,16 +80,21 @@ var Controller = function(options)
 	
 	this.keepConnection = function(){
 		self.interval = setInterval(function(){
-			self.socket.socket.setKeepAlive(self.socket.socketId, true, 30, function(res){
-				if (res!==0) {
-					self.end();
-				}
-				self.socket.info(function(info){
-					if (info.connected === false) {
-						self.end();
+			try {
+				self.socket.socket.setKeepAlive(self.socket.socketId, true, 30, function(res){
+					if (res!==0) {
+						return self.end();
+					} else {
+						self.socket.info(function(info){
+							if (!info || info.connected === false) {
+								self.end();
+							}
+						});
 					}
 				});
-			});
+			} catch (e) {
+				self.end();
+			}
 		}, 1000);
 	}
 	
@@ -106,9 +116,19 @@ var Terminal = function(options)
 		
 	}
 	
-	this.createEle = function(type){
+	this.createEle = function(type, useLast){
 		if (self.lastElement) {
-			self.lastElement.setAttribute('contenteditable', false);
+			if (useLast && self.lastElement.innerText=='' &&
+				self.lastElement.getAttribute('contenteditable')==true.toString() &&
+				self.lastElement.getAttribute('data-telnet')==type
+				) {
+				return self.lastElement;
+			} else {
+				self.lastElement.setAttribute('contenteditable', false);
+				if (!self.lastElement.innerText) {
+					self.lastElement.innerText="\n";
+				}
+			}
 		}
 		
 		var ele = document.createElement('div');
@@ -130,7 +150,6 @@ var Terminal = function(options)
 					switch (e.keyCode) {
 						case 13: // enter
 							e.preventDefault();
-							console.log('HEAD:' + e.target.innerText);
 							controller.exec(e.target.innerText);
 						break;
 					}
@@ -141,13 +160,14 @@ var Terminal = function(options)
 					console.log(e.keyCode);
 					switch (e.keyCode) {
 						case 68: // ctrl+D
+							controller.end();
 							break;
 						case 13: // enter
 							e.preventDefault();
 							
-							var msg = ele.innerText + "\r\n";
+							var msg = ele.innerText + "\n";
 							controller.socket.send(msg, function(info){
-								console.log("send: "+ encodeURI(msg), info);
+								console.log(info);
 							});
 							controller.terminal.input('body');
 							break;
@@ -158,13 +178,13 @@ var Terminal = function(options)
 	}
 	
 	this.output = function(msg, type) {
-		var body = self.createEle('body');
+		var body = self.createEle('body', true);
 		body.innerText = msg;
 		self.createEle(type);
 	}
 	
 	this.input = function(type) {
-		self.createEle(type);
+		self.createEle(type, false);
 	}
 }
 
@@ -210,7 +230,7 @@ var Sockets = function(options)
 	}
 	
 	this.str2ab = function(str) {
-		var buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+		var buf = new ArrayBuffer(str.length);
 		var bufView = new Uint8Array(buf);
 		for (var i=0, strLen=str.length; i<strLen; i++) {
 			bufView[i] = str.charCodeAt(i);
